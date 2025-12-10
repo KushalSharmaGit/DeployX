@@ -1,7 +1,7 @@
 const { exec } = require('child_process')
 const path = require('path')
 const fs = require('fs-extra')
-
+const {S3Client, PutObjectCommand} = require('@aws-sdk/client-s3');
 
 require("dotenv").config();
 
@@ -11,6 +11,14 @@ require("dotenv").config();
 // To build the image
 // docker build -t build-server .
 const PROJECT_ID = process.env.PROJECT_ID
+
+const s3Client = new S3Client({
+    region: process.env.AWS_REGION,
+    credentials: {  
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    }
+});
 
 async function init() {
     console.log('api-key', process.env.CLOUDINARY_API_KEY)
@@ -33,8 +41,22 @@ async function init() {
         const distFolderPath = path.join(__dirname, 'output', 'dist')
         const distFolderContents = fs.readdirSync(distFolderPath, { recursive: true })
         
+        for(const content of distFolderContents) {
+            console.log('Uploading', content);
+            if(fs.lstatSync(content).isDirectory()) continue;
 
-        console.log('Website folders and files done');
+            const command = new PutObjectCommand({
+                Bucket: process.env.AWS_S3_BUCKET_NAME,
+                Key:`__ouputs/${PROJECT_ID}/${content}`,
+                Body: fs.createReadStream(content),
+                ContentType:mime.lookup(content),
+            });
+
+            await s3Client.send(command);
+            console.log('Uploaded', content);
+        }   
+
+        console.log('Upload Complete');
        
     })
 }
