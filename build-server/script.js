@@ -2,6 +2,7 @@ const { exec } = require('child_process')
 const path = require('path')
 const fs = require('fs-extra')
 const {S3Client, PutObjectCommand} = require('@aws-sdk/client-s3');
+const mime = require('mime-types')
 
 require("dotenv").config();
 
@@ -41,21 +42,25 @@ async function init() {
         const distFolderPath = path.join(__dirname, 'output', 'dist')
         const distFolderContents = fs.readdirSync(distFolderPath, { recursive: true })
         
-        for(const content of distFolderContents) {
-            console.log('Uploading', content);
-            if(fs.lstatSync(content).isDirectory()) continue;
+        for (const content of distFolderContents) {
+            const contentPath = path.join(distFolderPath, content);
+
+            if (fs.lstatSync(contentPath).isDirectory()) continue;
+
+            const fileStream = fs.createReadStream(contentPath);
+            const { size } = fs.statSync(contentPath);
 
             const command = new PutObjectCommand({
                 Bucket: process.env.AWS_S3_BUCKET_NAME,
-                Key:`__ouputs/${PROJECT_ID}/${content}`,
-                Body: fs.createReadStream(content),
-                ContentType:mime.lookup(content),
+                Key: `__outputs/${PROJECT_ID}/${content}`, // relative, clean path
+                Body: fileStream,
+                ContentLength: size,  
+                ContentType: mime.lookup(contentPath) || "application/octet-stream"
             });
 
             await s3Client.send(command);
-            console.log('Uploaded', content);
-        }   
-
+            console.log("Uploaded", content);
+        }
         console.log('Upload Complete');
        
     })
